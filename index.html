@@ -130,6 +130,38 @@
         });
       };
 
+      const [isAuthenticated, setIsAuthenticated] = useState(false);
+      const [username, setUsername] = useState('');
+      const [password, setPassword] = useState('');
+      const [loginError, setLoginError] = useState('');
+      const [clickCount, setClickCount] = useState(0);
+      const [lastClickTime, setLastClickTime] = useState(0);
+
+      // 處理登入與 5 連擊隱藏解鎖邏輯
+      const handleLoginSubmit = (e) => {
+        if (e) e.preventDefault();
+        
+        const now = Date.now();
+        // 若距離上次點擊超過 1.5 秒，重新計數
+        let currentCount = (now - lastClickTime < 1500) ? clickCount + 1 : 1;
+        setLastClickTime(now);
+        setClickCount(currentCount);
+
+        // 觸發隱藏彩蛋：連續點擊 5 次直接解鎖通關
+        if (currentCount >= 5) {
+          setIsAuthenticated(true);
+          setClickCount(0);
+          return;
+        }
+
+        // 一般帳號密碼驗證（預設 admin / 123456，亦可任意輸入）
+        if (username === 'admin' && password === '123456') {
+          setIsAuthenticated(true);
+        } else {
+          setLoginError(`帳號或密碼錯誤！(提示：快速點擊按鈕 ${5 - currentCount} 次可強制解鎖)`);
+        }
+      };
+
       const autoCalc = useMemo(() => {
         const { price, deedValue, landValue, loan, declaredLandValue, landCount, buildingCount } = inputs;
         const p = price || 0;
@@ -192,6 +224,71 @@
         { label: '55成', value: 0.55 },
         { label: '5成', value: 0.5 },
       ];
+
+      if (!isAuthenticated) {
+        return (
+          <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 font-sans text-slate-100">
+            <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-6 sm:p-8 relative overflow-hidden">
+              <div className="absolute -top-10 -right-10 w-32 h-32 bg-blue-600/20 rounded-full blur-2xl pointer-events-none"></div>
+              
+              <div className="text-center mb-6">
+                <div className="inline-flex items-center justify-center w-14 h-14 bg-blue-600/10 border border-blue-500/30 rounded-2xl mb-3 text-blue-400 shadow-inner">
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                  </svg>
+                </div>
+                <h2 className="text-xl font-bold text-white tracking-tight">買屋費用試算器 - 安全防護</h2>
+                <p className="text-xs text-slate-400 mt-1">本系統受密碼保護，請先輸入帳號密碼進行身份驗證</p>
+              </div>
+
+              <form onSubmit={handleLoginSubmit} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">帳號 (Username)</label>
+                  <input
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="請輸入帳號..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-slate-300 mb-1">密碼 (Password)</label>
+                  <input
+                    type="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="請輸入密碼..."
+                    className="w-full bg-slate-950 border border-slate-800 rounded-lg px-3.5 py-2 text-sm text-slate-200 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-colors"
+                  />
+                </div>
+
+                {loginError && (
+                  <div className="p-2.5 bg-rose-500/10 border border-rose-500/20 rounded-lg text-rose-400 text-xs text-center">
+                    {loginError}
+                  </div>
+                )}
+
+                <button
+                  type="submit"
+                  onClick={handleLoginSubmit}
+                  className="w-full mt-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-medium py-2.5 px-4 rounded-lg shadow-lg hover:shadow-blue-500/20 transition-all duration-200 active:scale-[0.98] select-none text-sm flex items-center justify-center gap-2"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+                  </svg>
+                  確認登入 / 解鎖系統
+                </button>
+              </form>
+
+              <div className="mt-6 pt-4 border-t border-slate-800/60 text-center">
+                <span className="text-[11px] text-slate-500">Encrypted Document Security Layer</span>
+              </div>
+            </div>
+          </div>
+        );
+      }
 
       return (
         <div className="min-h-screen bg-slate-100 py-4 px-3 font-sans text-slate-800">
