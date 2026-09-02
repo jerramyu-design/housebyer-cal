@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>買屋費用與自備款試算</title>
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React & ReactDOM CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <!-- Babel Standalone CDN -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-100">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    // SVG Icons
+    const InfoIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5 text-slate-400 inline" viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+      </svg>
+    );
+
+    const RefreshIcon = () => (
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-3 w-3 inline" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+      </svg>
+    );
+
+    const CurrencyInput = ({ 
+      label, value, onChange, placeholder, tooltip, prefix = 'NT$', suffix = '元', primary = false, showReset = false, onReset 
+    }) => {
+      const displayValue = value === '' || value === undefined ? '' : new Intl.NumberFormat('en-US').format(value);
+
+      const handleChange = (e) => {
+        const raw = e.target.value.replace(/,/g, '').replace(/\D/g, '');
+        onChange(raw === '' ? '' : Number(raw));
+      };
+
+      return (
+        <div className="mb-2.5">
+          <div className="flex justify-between items-center mb-0.5">
+            <label className={`block text-xs ${primary ? 'font-bold text-blue-800' : 'font-medium text-slate-700'} flex items-center gap-1`}>
+              {label}
+              {tooltip && (
+                <span title={tooltip} className="cursor-help">
+                  <InfoIcon />
+                </span>
+              )}
+            </label>
+            {showReset && (
+              <button 
+                onClick={onReset}
+                className="text-[11px] text-blue-600 hover:text-blue-800 flex items-center gap-0.5 transition-colors font-medium"
+                title="恢復自動計算"
+              >
+                <RefreshIcon /> 自動計算
+              </button>
+            )}
+          </div>
+          <div className="relative rounded-md shadow-xs">
+            {prefix && (
+              <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                <span className="text-slate-400 text-xs">{prefix}</span>
+              </div>
+            )}
+            <input
+              type="text"
+              inputMode="numeric"
+              className={`block w-full ${prefix ? 'pl-9' : 'pl-2.5'} pr-7 py-1 text-xs sm:text-sm border rounded-md focus:ring-1 focus:outline-none transition-shadow
+                ${primary 
+                  ? 'border-blue-400 focus:ring-blue-300 focus:border-blue-500 bg-blue-50/40 font-semibold text-slate-900' 
+                  : 'border-slate-300 focus:ring-slate-300 focus:border-slate-500 text-slate-800'}
+                ${showReset ? 'bg-amber-50/60 border-amber-300 focus:ring-amber-200 focus:border-amber-400' : ''}  
+              `}
+              placeholder={placeholder}
+              value={displayValue}
+              onChange={handleChange}
+            />
+            <div className="absolute inset-y-0 right-0 pr-2 flex items-center pointer-events-none">
+              <span className="text-slate-400 text-[11px]">{suffix}</span>
+            </div>
+          </div>
+        </div>
+      );
+    };
+
+    function App() {
+      const [inputs, setInputs] = useState({
+        price: '',
+        deedValue: '',
+        landValue: '',
+        loan: '',
+        declaredLandValue: '',
+        landCount: 1,
+        buildingCount: 1
+      });
+
+      const [loanPercentage, setLoanPercentageState] = useState(0.8);
+      const [isLoanManualAmount, setIsLoanManualAmount] = useState(false);
+      const [overrides, setOverrides] = useState({});
+
+      const handleInputChange = (field, value) => {
+        setInputs(prev => {
+          const nextState = { ...prev, [field]: value };
+          if (field === 'price' && !isLoanManualAmount) {
+            nextState.loan = value === '' ? '' : Math.round(Number(value) * loanPercentage);
+          }
+          return nextState;
+        });
+
+        if (field === 'loan') {
+          setIsLoanManualAmount(true);
+        }
+      };
+
+      const handleOverrideChange = (field, value) => {
+        setOverrides(prev => ({ ...prev, [field]: value }));
+      };
+
+      const resetOverride = (field) => {
+        setOverrides(prev => {
+          const newOverrides = { ...prev };
+          delete newOverrides[field];
+          return newOverrides;
+        });
+      };
+
+      const autoCalc = useMemo(() => {
+        const { price, deedValue, landValue, loan, declaredLandValue, landCount, buildingCount } = inputs;
+        const p = price || 0;
+        const dv = deedValue || 0;
+        const lv = landValue || 0;
+        const l = loan || 0;
+        const dlv = declaredLandValue || 0;
+        const lc = landCount || 1;
+        const bc = buildingCount || 1;
+
+        return {
+          deedTax: Math.round(dv * 0.06),
+          stampDuty: Math.round((lv + dv) * 0.001),
+          transferFee: Math.round((dlv + dv) * 0.001),
+          loanSettingFee: Math.round(l * 1.2 * 0.001),
+          agencyFee: Math.round(p * 0.02),
+          escrowFee: Math.round(p * 0.0003),
+          scrivenerFee: 14000 + (Math.max(0, lc - 1) + Math.max(0, bc - 1)) * 1000,
+          settingFee: 5000,
+          realEstateRegFee: 1500,
+          contractFee: 1000
+        };
+      }, [inputs]);
+
+      const finalValues = {
+        deedTax: overrides.deedTax !== undefined ? overrides.deedTax : autoCalc.deedTax,
+        stampDuty: overrides.stampDuty !== undefined ? overrides.stampDuty : autoCalc.stampDuty,
+        transferFee: overrides.transferFee !== undefined ? overrides.transferFee : autoCalc.transferFee,
+        loanSettingFee: overrides.loanSettingFee !== undefined ? overrides.loanSettingFee : autoCalc.loanSettingFee,
+        agencyFee: overrides.agencyFee !== undefined ? overrides.agencyFee : autoCalc.agencyFee,
+        escrowFee: overrides.escrowFee !== undefined ? overrides.escrowFee : autoCalc.escrowFee,
+        scrivenerFee: overrides.scrivenerFee !== undefined ? overrides.scrivenerFee : autoCalc.scrivenerFee,
+        settingFee: overrides.settingFee !== undefined ? overrides.settingFee : autoCalc.settingFee,
+        realEstateRegFee: overrides.realEstateRegFee !== undefined ? overrides.realEstateRegFee : autoCalc.realEstateRegFee,
+        contractFee: overrides.contractFee !== undefined ? overrides.contractFee : autoCalc.contractFee,
+      };
+
+      const totalTaxesAndGovFees = finalValues.deedTax + finalValues.stampDuty + finalValues.transferFee + finalValues.loanSettingFee;
+      const totalServicesAndOthers = finalValues.agencyFee + finalValues.escrowFee + finalValues.scrivenerFee + finalValues.settingFee + finalValues.realEstateRegFee + finalValues.contractFee;
+      const totalExtraCosts = totalTaxesAndGovFees + totalServicesAndOthers;
+      
+      const downPayment = Math.max(0, (inputs.price || 0) - (inputs.loan || 0));
+      const totalCashRequired = downPayment + totalExtraCosts;
+
+      const setLoanPercentage = (percentage) => {
+        setLoanPercentageState(percentage);
+        setIsLoanManualAmount(false);
+        setInputs(prev => ({
+          ...prev,
+          loan: prev.price === '' ? '' : Math.round(Number(prev.price) * percentage)
+        }));
+      };
+
+      const loanOptions = [
+        { label: '8成', value: 0.8 },
+        { label: '75成', value: 0.75 },
+        { label: '7成', value: 0.7 },
+        { label: '65成', value: 0.65 },
+        { label: '6成', value: 0.6 },
+        { label: '55成', value: 0.55 },
+        { label: '5成', value: 0.5 },
+      ];
+
+      return (
+        <div className="min-h-screen bg-slate-100 py-4 px-3 font-sans text-slate-800">
+          <div className="max-w-6xl mx-auto">
+            
+            <div className="mb-4 text-center">
+              <h1 className="text-xl sm:text-2xl font-bold text-slate-800 tracking-tight">買屋費用與自備款試算</h1>
+              <p className="text-xs text-slate-500 mt-0.5">輸入購屋數據，自動即時試算隱藏費用與頭期款，亦可微調各項費用。</p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+              
+              <div className="lg:col-span-5 space-y-4">
+                <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-4">
+                  <h2 className="text-base font-bold text-slate-800 mb-3 pb-1.5 border-b border-slate-100 flex items-center">
+                    <span className="bg-blue-600 text-white w-5 h-5 rounded-full inline-flex items-center justify-center text-xs mr-1.5">1</span>
+                    基本資料輸入
+                  </h2>
+                  
+                  <CurrencyInput
+                    label="成交金額"
+                    value={inputs.price}
+                    onChange={(val) => handleInputChange('price', val)}
+                    primary={true}
+                    placeholder="例如: 15,000,000"
+                  />
+
+                  <div className="mb-3">
+                    <CurrencyInput
+                      label="貸款金額"
+                      value={inputs.loan}
+                      onChange={(val) => handleInputChange('loan', val)}
+                      primary={true}
+                      placeholder="例如: 12,000,000"
+                    />
+                    <div className="flex flex-wrap gap-1 mt-[-4px] mb-2">
+                      {loanOptions.map((opt) => (
+                        <button 
+                          key={opt.label}
+                          onClick={() => setLoanPercentage(opt.value)} 
+                          className={`text-[11px] py-0.5 px-2 rounded transition-colors ${
+                            !isLoanManualAmount && loanPercentage === opt.value
+                              ? 'bg-blue-600 text-white shadow-xs font-medium'
+                              : 'bg-slate-100 hover:bg-slate-200 text-slate-600'
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-100">
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">稅基與現值評定參考</h3>
+                    
+                    <div className="grid grid-cols-2 gap-2">
+                      <CurrencyInput
+                        label="土地筆數"
+                        value={inputs.landCount}
+                        onChange={(val) => handleInputChange('landCount', val)}
+                        prefix=""
+                        suffix="筆"
+                      />
+                      <CurrencyInput
+                        label="建物筆數"
+                        value={inputs.buildingCount}
+                        onChange={(val) => handleInputChange('buildingCount', val)}
+                        prefix=""
+                        suffix="筆"
+                      />
+                    </div>
+
+                    <CurrencyInput
+                      label="建物契價"
+                      tooltip="房屋課稅現值，用於計算契稅與印花稅"
+                      value={inputs.deedValue}
+                      onChange={(val) => handleInputChange('deedValue', val)}
+                    />
+                    
+                    <CurrencyInput
+                      label="土地公告現值"
+                      tooltip="公告土地現值總額，用於計算印花稅"
+                      value={inputs.landValue}
+                      onChange={(val) => handleInputChange('landValue', val)}
+                    />
+                    
+                    <CurrencyInput
+                      label="申報地價"
+                      tooltip="過戶登記規費計價基準"
+                      value={inputs.declaredLandValue}
+                      onChange={(val) => handleInputChange('declaredLandValue', val)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="lg:col-span-7 space-y-4">
+                
+                <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-xl shadow-md p-4 text-white flex flex-row justify-between items-center">
+                  <div>
+                    <p className="text-slate-300 text-xs font-medium mb-0.5">應備總現金 (頭期款 + 各項費用)</p>
+                    <div className="text-2xl sm:text-3xl font-bold text-blue-400 tracking-tight">
+                      NT$ {new Intl.NumberFormat('en-US').format(totalCashRequired)}
+                    </div>
+                  </div>
+                  <div className="text-right border-l border-slate-700 pl-4 sm:pl-6">
+                    <p className="text-slate-300 text-xs mb-0.5">
+                      頭期款: <span className="font-semibold text-white">{new Intl.NumberFormat('en-US').format(downPayment)}</span>
+                    </p>
+                    <p className="text-slate-300 text-xs">
+                      總費用: <span className="font-semibold text-amber-300">{new Intl.NumberFormat('en-US').format(totalExtraCosts)}</span>
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  
+                  <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-4">
+                    <h2 className="text-sm font-bold text-slate-800 mb-3 pb-1.5 border-b border-slate-100 flex items-center justify-between">
+                      <div className="flex items-center">
+                        <span className="bg-rose-100 text-rose-600 w-5 h-5 rounded-full inline-flex items-center justify-center text-xs mr-1.5">2</span>
+                        政府稅費與規費
+                      </div>
+                      <span className="text-xs font-bold text-rose-600">NT$ {new Intl.NumberFormat('en-US').format(totalTaxesAndGovFees)}</span>
+                    </h2>
+                    
+                    <CurrencyInput
+                      label="契稅"
+                      tooltip="建物契價 × 6%"
+                      value={finalValues.deedTax}
+                      onChange={(val) => handleOverrideChange('deedTax', val)}
+                      showReset={overrides.deedTax !== undefined}
+                      onReset={() => resetOverride('deedTax')}
+                    />
+                    
+                    <CurrencyInput
+                      label="印花稅"
+                      tooltip="(建物契價 + 土地公告現值) × 0.1%"
+                      value={finalValues.stampDuty}
+                      onChange={(val) => handleOverrideChange('stampDuty', val)}
+                      showReset={overrides.stampDuty !== undefined}
+                      onReset={() => resetOverride('stampDuty')}
+                    />
+
+                    <CurrencyInput
+                      label="買賣登記規費"
+                      tooltip="(建物契價 + 申報地價) × 0.1%"
+                      value={finalValues.transferFee}
+                      onChange={(val) => handleOverrideChange('transferFee', val)}
+                      showReset={overrides.transferFee !== undefined}
+                      onReset={() => resetOverride('transferFee')}
+                    />
+
+                    <CurrencyInput
+                      label="貸款設定規費"
+                      tooltip="貸款金額 × 1.2 × 0.1%"
+                      value={finalValues.loanSettingFee}
+                      onChange={(val) => handleOverrideChange('loanSettingFee', val)}
+                      showReset={overrides.loanSettingFee !== undefined}
+                      onReset={() => resetOverride('loanSettingFee')}
+                    />
+                  </div>
+
+                  <div className="bg-white rounded-xl shadow-xs border border-slate-200 p-4">
+                    <h2 className="text-sm font-bold text-slate-800 mb-3 pb-1.5 border-b border-slate-100 flex items-center justify-between">
+                      <div className="flex items-center">
+                        <span className="bg-teal-100 text-teal-600 w-5 h-5 rounded-full inline-flex items-center justify-center text-xs mr-1.5">3</span>
+                        服務與其他費用
+                      </div>
+                      <span className="text-xs font-bold text-teal-600">NT$ {new Intl.NumberFormat('en-US').format(totalServicesAndOthers)}</span>
+                    </h2>
+                    
+                    <CurrencyInput
+                      label="仲介費 (買方)"
+                      tooltip="成交金額 × 2%"
+                      value={finalValues.agencyFee}
+                      onChange={(val) => handleOverrideChange('agencyFee', val)}
+                      showReset={overrides.agencyFee !== undefined}
+                      onReset={() => resetOverride('agencyFee')}
+                    />
+                    
+                    <CurrencyInput
+                      label="履約保證費"
+                      tooltip="成交金額 × 萬分之3"
+                      value={finalValues.escrowFee}
+                      onChange={(val) => handleOverrideChange('escrowFee', val)}
+                      showReset={overrides.escrowFee !== undefined}
+                      onReset={() => resetOverride('escrowFee')}
+                    />
+
+                    <CurrencyInput
+                      label="代書費"
+                      tooltip="一地一建 14,000 元，每多一筆加 1,000 元"
+                      value={finalValues.scrivenerFee}
+                      onChange={(val) => handleOverrideChange('scrivenerFee', val)}
+                      showReset={overrides.scrivenerFee !== undefined}
+                      onReset={() => resetOverride('scrivenerFee')}
+                    />
+
+                    <CurrencyInput
+                      label="設定費"
+                      tooltip="代書抵押權設定費"
+                      value={finalValues.settingFee}
+                      onChange={(val) => handleOverrideChange('settingFee', val)}
+                      showReset={overrides.settingFee !== undefined}
+                      onReset={() => resetOverride('settingFee')}
+                    />
+
+                    <CurrencyInput
+                      label="實價登錄費"
+                      tooltip="代書代辦實價登錄費"
+                      value={finalValues.realEstateRegFee}
+                      onChange={(val) => handleOverrideChange('realEstateRegFee', val)}
+                      showReset={overrides.realEstateRegFee !== undefined}
+                      onReset={() => resetOverride('realEstateRegFee')}
+                    />
+
+                    <CurrencyInput
+                      label="簽約費"
+                      tooltip="簽定契約手續費"
+                      value={finalValues.contractFee}
+                      onChange={(val) => handleOverrideChange('contractFee', val)}
+                      showReset={overrides.contractFee !== undefined}
+                      onReset={() => resetOverride('contractFee')}
+                    />
+                  </div>
+
+                </div>
+              </div>
+              
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
